@@ -1,9 +1,13 @@
 use bevy::prelude::*;
 use rand::prelude::*;
 
+// Game configuration constants
 const GRID_SIZE: usize = 3;
 const CELL_SIZE: f32 = 60.0;
 const CELL_SPACING: f32 = 10.0;
+const PATTERN_DISPLAY_TIME: f32 = 2.0;  // Seconds to show pattern
+const INITIAL_PATTERN_CELLS: u32 = 3;   // Starting pattern complexity
+const SCORE_DIFFICULTY_SCALE: u32 = 3;  // Score points per difficulty increase
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, States, Default)]
 enum GameState {
@@ -58,7 +62,7 @@ fn main() {
         .insert_resource(PlayerPattern {
             grid: [[false; GRID_SIZE]; GRID_SIZE],
         })
-        .insert_resource(GameTimer(Timer::from_seconds(2.0, TimerMode::Once)))
+        .insert_resource(GameTimer(Timer::from_seconds(PATTERN_DISPLAY_TIME, TimerMode::Once)))
         .insert_resource(Score(0))
         .add_systems(Startup, setup)
         .add_systems(
@@ -150,12 +154,16 @@ fn generate_pattern(
 
     // Generate random pattern (complexity increases with score)
     let mut rng = thread_rng();
-    let num_cells = (3 + score.0 / 3).min(GRID_SIZE * GRID_SIZE - 1) as usize;
+    let num_cells = (INITIAL_PATTERN_CELLS + score.0 / SCORE_DIFFICULTY_SCALE)
+        .min((GRID_SIZE * GRID_SIZE - 1) as u32) as usize;
 
     for _ in 0..num_cells {
         let x = rng.gen_range(0..GRID_SIZE);
         let y = rng.gen_range(0..GRID_SIZE);
-        pattern.grid[x][y] = true;
+        // Bounds checking for safety
+        if x < GRID_SIZE && y < GRID_SIZE {
+            pattern.grid[x][y] = true;
+        }
     }
 
     // Reset timer
@@ -215,8 +223,13 @@ fn handle_player_input(
 
     // Handle mouse clicks
     if mouse_button.just_pressed(MouseButton::Left) {
-        let (camera, camera_transform) = camera.single();
-        let window = windows.single();
+        // Safe camera query with error handling
+        let Ok((camera, camera_transform)) = camera.get_single() else {
+            return;
+        };
+        let Ok(window) = windows.get_single() else {
+            return;
+        };
 
         if let Some(cursor_position) = window.cursor_position() {
             if let Some(world_position) = camera
@@ -261,12 +274,13 @@ fn check_result(
     mut query: Query<(&GridCell, &mut Sprite)>,
     mut text_query: Query<&mut Text>,
 ) {
-    // Check if patterns match
+    // Check if patterns match (with early exit optimization)
     let mut matches = true;
-    for x in 0..GRID_SIZE {
+    'outer: for x in 0..GRID_SIZE {
         for y in 0..GRID_SIZE {
             if pattern.grid[x][y] != player_pattern.grid[x][y] {
                 matches = false;
+                break 'outer;  // Early exit on first mismatch
             }
         }
     }
@@ -285,7 +299,7 @@ fn check_result(
     }
 
     if matches {
-        score.0 += 1;
+        score.0 = score.0.saturating_add(1);  // Prevent overflow
         if let Ok(mut text) = text_query.get_single_mut() {
             text.sections[0].value = format!("Correct! Score: {}", score.0);
         }
