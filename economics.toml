@@ -1,0 +1,129 @@
+# Papilio Credit Economics Configuration
+# Mathematical model for token economics in Hope/Libertalia ecosystem
+
+[tokens]
+# Token supply limits
+papilio_max_supply = 1_000_000_000
+pollen_max_supply = 100_000_000
+nectar_max_supply = 10_000_000
+
+# Initial distribution
+papilio_genesis = 1_000_000
+pollen_genesis = 100_000
+nectar_genesis = 10_000
+
+[exchange_rates]
+# Fixed exchange rates (can be made dynamic later)
+papilio_to_pollen = 10
+pollen_to_nectar = 10
+papilio_to_nectar = 100
+
+# Slippage for large trades
+max_slippage_percent = 5
+
+[rewards]
+# Base rewards per puzzle difficulty
+base_reward = 10
+difficulty_multiplier = 1.5
+max_reward_per_puzzle = 1000
+
+# Time-based bonuses
+speed_bonus_under_5s = 5
+speed_bonus_under_10s = 3
+speed_bonus_under_20s = 1
+
+# Efficiency bonus
+efficiency_bonus = 2
+
+# Streak multipliers
+streak_multiplier_5 = 1.2
+streak_multiplier_10 = 1.5
+streak_multiplier_20 = 2.0
+
+[anti_cheat]
+# Minimum solve time (milliseconds)
+min_solve_time = 100
+
+# Maximum attempts per pattern
+max_pattern_attempts = 10
+
+# Suspicious behavior thresholds
+avg_solve_time_threshold = 500
+consistency_check_window = 20
+
+[inflation]
+# Daily mint limits
+daily_papilio_mint_limit = 100_000
+daily_pollen_mint_limit = 10_000
+daily_nectar_mint_limit = 1_000
+
+# Halving schedule (days)
+halving_interval = 365
+min_reward_after_halving = 1
+
+[staking]
+# Staking rewards (annual percentage)
+papilio_staking_apr = 5
+pollen_staking_apr = 10
+nectar_staking_apr = 20
+
+# Minimum staking amounts
+min_stake_papilio = 100
+min_stake_pollen = 10
+min_stake_nectar = 1
+
+# Lock periods (days)
+stake_lock_period = 30
+
+[governance]
+# Voting power weights
+papilio_vote_weight = 1
+pollen_vote_weight = 15
+nectar_vote_weight = 200
+
+# Proposal thresholds
+proposal_minimum_papilio = 10_000
+quorum_percentage = 10
+approval_percentage = 66
+
+[liquidity]
+# Liquidity pool incentives
+lp_reward_multiplier = 1.5
+impermanent_loss_protection = 0.8
+
+# Pool fees (basis points)
+swap_fee = 30  # 0.3%
+protocol_fee = 10  # 0.1%
+
+[reputation]
+# Reputation scoring
+max_reputation = 1000
+reputation_decay_daily = 1
+reputation_gain_per_solve = 5
+reputation_bonus_threshold = 800
+
+# Reputation multipliers
+high_reputation_multiplier = 1.2
+elite_reputation_multiplier = 1.5
+
+[game_theory]
+# Nash equilibrium parameters
+honest_play_reward = 100
+cheating_detection_probability = 0.9
+cheating_penalty_multiplier = 10
+reporting_reward = 50
+
+# Cooperative play bonuses
+team_solve_bonus = 1.3
+guild_bonus = 1.1
+
+[scaling]
+# Network capacity
+max_proofs_per_block = 100
+target_block_time = 6  # seconds
+max_pending_proofs = 10_000
+
+# Gas pricing
+base_gas_price = 0.1
+congestion_multiplier = 2.0
+priority_fee_cap = 10.0
