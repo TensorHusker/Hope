@@ -1,0 +1,7 @@
+// module.modulemap
+// Module map for Rust FFI library integration
+
+module HopeRustFFI {
+    header "Hope-Bridging-Header.h"
+    export *
+}
