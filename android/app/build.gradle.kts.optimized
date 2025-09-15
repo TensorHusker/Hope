@@ -1,0 +1,410 @@
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+    id("com.google.gms.google-services")
+    id("com.google.firebase.crashlytics")
+    id("kotlin-kapt")
+    id("dagger.hilt.android.plugin")
+    id("androidx.baselineprofile")
+}
+
+android {
+    namespace = "com.hope.game"
+    compileSdk = 34
+
+    defaultConfig {
+        applicationId = "com.hope.game"
+        minSdk = 24
+        targetSdk = 34
+        versionCode = 1
+        versionName = "1.0.0"
+
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        
+        // NDK configuration for optimal performance
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+            
+            // Optimize for specific architectures
+            if (project.hasProperty("targetAbi")) {
+                abiFilters.clear()
+                abiFilters += project.property("targetAbi") as String
+            }
+        }
+        
+        // External native build with optimizations
+        externalNativeBuild {
+            cmake {
+                cppFlags += listOf(
+                    "-std=c++17",
+                    "-O3",                    // Maximum optimization
+                    "-ffast-math",            // Fast floating point
+                    "-funroll-loops",         // Loop unrolling
+                    "-ftree-vectorize",       // Auto-vectorization
+                    "-march=native",          // CPU-specific optimizations
+                    "-flto",                  // Link-time optimization
+                    "-fomit-frame-pointer",   // Omit frame pointer
+                    "-DNDEBUG"               // Remove debug code
+                )
+                
+                arguments += listOf(
+                    "-DANDROID_STL=c++_shared",
+                    "-DANDROID_ARM_MODE=arm",
+                    "-DANDROID_ARM_NEON=TRUE",
+                    "-DCMAKE_BUILD_TYPE=Release"
+                )
+            }
+        }
+        
+        // Vector drawables for smaller APK
+        vectorDrawables {
+            useSupportLibrary = true
+        }
+        
+        // Resource configuration
+        resourceConfigurations += listOf("en", "xxhdpi")
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            isDebuggable = false
+            
+            // ProGuard/R8 optimization
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules-optimized.pro"
+            )
+            
+            // Native debug symbols
+            ndk {
+                debugSymbolLevel = "SYMBOL_TABLE"
+            }
+            
+            // Optimize APK
+            packagingOptions {
+                resources {
+                    excludes += listOf(
+                        "META-INF/**",
+                        "kotlin/**",
+                        "**.proto",
+                        "**.bin"
+                    )
+                }
+            }
+            
+            // Signing config
+            signingConfig = signingConfigs.getByName("release")
+            
+            // Build config fields
+            buildConfigField("boolean", "ENABLE_CRASHLYTICS", "true")
+            buildConfigField("boolean", "ENABLE_ANALYTICS", "true")
+            buildConfigField("boolean", "ENABLE_PERFORMANCE_MONITORING", "true")
+        }
+        
+        debug {
+            isMinifyEnabled = false
+            isDebuggable = true
+            
+            // Debug-specific optimizations
+            buildConfigField("boolean", "ENABLE_CRASHLYTICS", "false")
+            buildConfigField("boolean", "ENABLE_ANALYTICS", "false")
+            buildConfigField("boolean", "ENABLE_PERFORMANCE_MONITORING", "true")
+            
+            // Profile-guided optimization collection
+            profileable = true
+        }
+        
+        // Benchmark build type
+        create("benchmark") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+            isDebuggable = false
+            
+            // Disable code coverage for benchmarks
+            enableAndroidTestCoverage = false
+            enableUnitTestCoverage = false
+        }
+    }
+    
+    // Compile options
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+        
+        // Enable incremental compilation
+        isCoreLibraryDesugaringEnabled = true
+    }
+    
+    // Kotlin options
+    kotlinOptions {
+        jvmTarget = "17"
+        
+        // Compiler flags for optimization
+        freeCompilerArgs += listOf(
+            "-opt-in=kotlin.RequiresOptIn",
+            "-opt-in=kotlinx.coroutines.ExperimentalCoroutinesApi",
+            "-opt-in=kotlin.ExperimentalStdlibApi",
+            "-Xjvm-default=all",              // Generate default methods
+            "-Xlambdas=indy",                 // Use invokedynamic for lambdas
+            "-Xno-call-assertions",           // Remove call assertions
+            "-Xno-param-assertions",          // Remove parameter assertions
+            "-Xno-receiver-assertions",       // Remove receiver assertions
+            "-Xopt-in=kotlin.contracts.ExperimentalContracts"
+        )
+    }
+    
+    // Build features
+    buildFeatures {
+        compose = true
+        viewBinding = true
+        buildConfig = true
+        
+        // Disable unused features
+        aidl = false
+        renderScript = false
+        shaders = false
+    }
+    
+    // Compose options
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.4"
+        
+        // Compose compiler optimizations
+        useLiveLiterals = false  // Disable in release for performance
+    }
+    
+    // External native build
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
+    
+    // Packaging options
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = false  // Use uncompressed native libraries
+            
+            // Keep only necessary ABIs in release
+            if (gradle.startParameter.taskNames.any { it.contains("Release") }) {
+                pickFirst("lib/armeabi-v7a/libc++_shared.so")
+                pickFirst("lib/arm64-v8a/libc++_shared.so")
+                pickFirst("lib/x86_64/libc++_shared.so")
+            }
+        }
+        
+        resources {
+            excludes += listOf(
+                "META-INF/DEPENDENCIES",
+                "META-INF/LICENSE",
+                "META-INF/LICENSE.txt",
+                "META-INF/NOTICE",
+                "META-INF/NOTICE.txt",
+                "META-INF/ASL2.0",
+                "META-INF/LGPL2.1",
+                "META-INF/*.kotlin_module",
+                "META-INF/proguard/**",
+                "kotlin-tooling-metadata.json",
+                "DebugProbesKt.bin"
+            )
+        }
+        
+        // Optimize DEX
+        dex {
+            useLegacyPackaging = false
+        }
+    }
+    
+    // Lint options for faster builds
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
+        checkDependencies = false
+        
+        // Disable expensive checks
+        disable += setOf(
+            "UnusedResources",
+            "IconDensities",
+            "GoogleAppIndexingWarning",
+            "MissingTranslation"
+        )
+    }
+    
+    // Test options
+    testOptions {
+        unitTests {
+            isReturnDefaultValues = true
+            isIncludeAndroidResources = true
+        }
+        
+        // Disable animations for tests
+        animationsDisabled = true
+    }
+    
+    // ADB options
+    adbOptions {
+        installOptions("-r", "-d")  // Replace existing, allow downgrade
+        timeOutInMs = 10 * 1000     // 10 second timeout
+    }
+    
+    // Splits for APK size optimization
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("armeabi-v7a", "arm64-v8a", "x86_64")
+            isUniversalApk = false
+        }
+        
+        density {
+            isEnable = false  // Use vector drawables instead
+        }
+    }
+    
+    // Bundle configuration
+    bundle {
+        language {
+            enableSplit = true
+        }
+        density {
+            enableSplit = true
+        }
+        abi {
+            enableSplit = true
+        }
+    }
+}
+
+// Dependencies with specific versions for optimization
+dependencies {
+    // Core Android - Latest stable versions
+    implementation("androidx.core:core-ktx:1.12.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
+    implementation("androidx.activity:activity-compose:1.8.1")
+    
+    // Compose BOM for consistent versions
+    val composeBom = platform("androidx.compose:compose-bom:2023.10.01")
+    implementation(composeBom)
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui-graphics")
+    implementation("androidx.compose.ui:ui-tooling-preview")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.runtime:runtime-livedata")
+    
+    // Coroutines with performance optimizations
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3") {
+        // Force using the fast service loader
+        exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-core-jvm")
+    }
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
+    
+    // Google Play Services - Minimal required
+    implementation("com.google.android.gms:play-services-games-v2:19.0.0")
+    implementation("com.google.android.gms:play-services-auth:20.7.0")
+    
+    // Google Play Billing
+    implementation("com.android.billingclient:billing-ktx:6.1.0")
+    
+    // Firebase - Use granular dependencies
+    implementation("com.google.firebase:firebase-analytics-ktx:21.5.0")
+    implementation("com.google.firebase:firebase-crashlytics-ktx:18.6.0")
+    implementation("com.google.firebase:firebase-messaging-ktx:23.4.0")
+    
+    // WorkManager
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
+    
+    // DataStore (faster than SharedPreferences)
+    implementation("androidx.datastore:datastore-preferences:1.0.0")
+    
+    // Hilt with optimizations
+    implementation("com.google.dagger:hilt-android:2.48")
+    kapt("com.google.dagger:hilt-compiler:2.48")
+    implementation("androidx.hilt:hilt-work:1.1.0")
+    kapt("androidx.hilt:hilt-compiler:1.1.0")
+    
+    // Game performance libraries
+    implementation("androidx.games:games-activity:2.0.2")
+    implementation("androidx.games:games-frame-pacing:2.0.2")
+    implementation("androidx.games:games-performance-tuner:2.0.0")
+    
+    // Startup optimization
+    implementation("androidx.startup:startup-runtime:1.1.1")
+    
+    // Profile installer for baseline profiles
+    implementation("androidx.profileinstaller:profileinstaller:1.3.1")
+    
+    // Tracing for performance analysis
+    implementation("androidx.tracing:tracing-ktx:1.2.0")
+    
+    // Core library desugaring for Java 8+ features
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+    
+    // Network - Optimized configuration
+    implementation("com.squareup.retrofit2:retrofit:2.9.0")
+    implementation("com.squareup.retrofit2:converter-moshi:2.9.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+    implementation("com.squareup.moshi:moshi-kotlin:1.15.0")
+    kapt("com.squareup.moshi:moshi-kotlin-codegen:1.15.0")
+    
+    // Testing
+    testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test.ext:junit:1.1.5")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
+    androidTestImplementation(composeBom)
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-tooling")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
+    
+    // Benchmark
+    androidTestImplementation("androidx.benchmark:benchmark-macro-junit4:1.2.2")
+}
+
+// Task optimizations
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    kotlinOptions {
+        // Enable experimental compiler optimizations
+        freeCompilerArgs += listOf(
+            "-Xbackend-threads=0",     // Use all available cores
+            "-Xir-optimizations-after-inlining",
+            "-Xskip-metadata-version-check"
+        )
+    }
+}
+
+// Configure kapt for performance
+kapt {
+    useBuildCache = true
+    correctErrorTypes = true
+    
+    javacOptions {
+        option("-Xmaxerrs", 1000)
+    }
+    
+    arguments {
+        arg("dagger.fastInit", "true")
+        arg("dagger.experimentalDaggerErrorMessages", "true")
+    }
+}
+
+// Enable build caching
+android.buildCache {
+    local {
+        isEnabled = true
+        directory = File(rootDir, "build-cache")
+        removeUnusedEntriesAfterDays = 30
+    }
+}
+
+// Configure baseline profiles
+baselineProfile {
+    baselineProfileOutputDir = "src/main/baseline-prof"
+    mergeIntoMain = true
+    saveInSrc = true
+    baselineProfileRulesRewrite = true
+}

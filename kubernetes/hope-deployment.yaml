@@ -1,0 +1,563 @@
+# Kubernetes Deployment Configuration for Hope Distributed System
+# Implements microservices architecture with auto-scaling and high availability
+
+---
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: hope-game
+
+---
+# ConfigMap for application configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hope-config
+  namespace: hope-game
+data:
+  redis.host: "redis-service.hope-game.svc.cluster.local"
+  kafka.brokers: "kafka-0.kafka-headless.hope-game.svc.cluster.local:9092,kafka-1.kafka-headless.hope-game.svc.cluster.local:9092,kafka-2.kafka-headless.hope-game.svc.cluster.local:9092"
+  grpc.port: "8080"
+  webrtc.stun: "stun:stun.l.google.com:19302"
+
+---
+# Secret for sensitive data
+apiVersion: v1
+kind: Secret
+metadata:
+  name: hope-secrets
+  namespace: hope-game
+type: Opaque
+data:
+  jwt.secret: aG9wZV9zZWNyZXRfa2V5XzEyMzQ1Njc4OTA= # base64 encoded
+  db.password: cGFzc3dvcmQxMjM= # base64 encoded
+
+---
+# Auth Service Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: hope-game
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: auth-service
+  template:
+    metadata:
+      labels:
+        app: auth-service
+        version: v1
+    spec:
+      containers:
+      - name: auth-service
+        image: hope.io/auth-service:latest
+        ports:
+        - containerPort: 8080
+          name: grpc
+        - containerPort: 8081
+          name: metrics
+        env:
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: hope-config
+              key: redis.host
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: hope-secrets
+              key: jwt.secret
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+---
+# Game Service Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: game-service
+  namespace: hope-game
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: game-service
+  template:
+    metadata:
+      labels:
+        app: game-service
+        version: v1
+    spec:
+      containers:
+      - name: game-service
+        image: hope.io/game-service:latest
+        ports:
+        - containerPort: 8080
+          name: grpc
+        - containerPort: 8081
+          name: metrics
+        - containerPort: 8082
+          name: websocket
+        env:
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: hope-config
+              key: redis.host
+        - name: KAFKA_BROKERS
+          valueFrom:
+            configMapKeyRef:
+              name: hope-config
+              key: kafka.brokers
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+---
+# Match Service Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: match-service
+  namespace: hope-game
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: match-service
+  template:
+    metadata:
+      labels:
+        app: match-service
+        version: v1
+    spec:
+      containers:
+      - name: match-service
+        image: hope.io/match-service:latest
+        ports:
+        - containerPort: 8080
+          name: grpc
+        - containerPort: 8081
+          name: metrics
+        env:
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: hope-config
+              key: redis.host
+        - name: KAFKA_BROKERS
+          valueFrom:
+            configMapKeyRef:
+              name: hope-config
+              key: kafka.brokers
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+---
+# Leaderboard Service Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: leaderboard-service
+  namespace: hope-game
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: leaderboard-service
+  template:
+    metadata:
+      labels:
+        app: leaderboard-service
+        version: v1
+    spec:
+      containers:
+      - name: leaderboard-service
+        image: hope.io/leaderboard-service:latest
+        ports:
+        - containerPort: 8080
+          name: grpc
+        - containerPort: 8081
+          name: metrics
+        env:
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: hope-config
+              key: redis.host
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+---
+# Redis StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: hope-game
+spec:
+  serviceName: redis-headless
+  replicas: 3
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+          name: redis
+        command:
+        - redis-server
+        - /etc/redis/redis.conf
+        volumeMounts:
+        - name: redis-config
+          mountPath: /etc/redis
+        - name: redis-data
+          mountPath: /data
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "200m"
+      volumes:
+      - name: redis-config
+        configMap:
+          name: redis-config
+  volumeClaimTemplates:
+  - metadata:
+      name: redis-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 10Gi
+
+---
+# Kafka StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+  namespace: hope-game
+spec:
+  serviceName: kafka-headless
+  replicas: 3
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+    spec:
+      containers:
+      - name: kafka
+        image: confluentinc/cp-kafka:latest
+        ports:
+        - containerPort: 9092
+          name: kafka
+        env:
+        - name: KAFKA_BROKER_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: KAFKA_ZOOKEEPER_CONNECT
+          value: "zookeeper-0.zookeeper-headless.hope-game.svc.cluster.local:2181,zookeeper-1.zookeeper-headless.hope-game.svc.cluster.local:2181,zookeeper-2.zookeeper-headless.hope-game.svc.cluster.local:2181"
+        - name: KAFKA_LISTENERS
+          value: "PLAINTEXT://:9092"
+        - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+          value: "true"
+        volumeMounts:
+        - name: kafka-data
+          mountPath: /var/lib/kafka/data
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+  volumeClaimTemplates:
+  - metadata:
+      name: kafka-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 20Gi
+
+---
+# Services
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service
+  namespace: hope-game
+spec:
+  selector:
+    app: auth-service
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: grpc
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: game-service
+  namespace: hope-game
+spec:
+  selector:
+    app: game-service
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: grpc
+  - port: 8082
+    targetPort: 8082
+    name: websocket
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: match-service
+  namespace: hope-game
+spec:
+  selector:
+    app: match-service
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: grpc
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: leaderboard-service
+  namespace: hope-game
+spec:
+  selector:
+    app: leaderboard-service
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: grpc
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: hope-game
+spec:
+  selector:
+    app: redis
+  ports:
+  - port: 6379
+    targetPort: 6379
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-headless
+  namespace: hope-game
+spec:
+  clusterIP: None
+  selector:
+    app: redis
+  ports:
+  - port: 6379
+    targetPort: 6379
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-headless
+  namespace: hope-game
+spec:
+  clusterIP: None
+  selector:
+    app: kafka
+  ports:
+  - port: 9092
+    targetPort: 9092
+
+---
+# Horizontal Pod Autoscaler for Game Service
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: game-service-hpa
+  namespace: hope-game
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: game-service
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+---
+# Network Policy for security
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: hope-network-policy
+  namespace: hope-game
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: hope-game
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: hope-game
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 80
+
+---
+# Ingress for external access
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hope-ingress
+  namespace: hope-game
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/websocket-services: "game-service"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+spec:
+  tls:
+  - hosts:
+    - api.hope.io
+    - game.hope.io
+    secretName: hope-tls
+  rules:
+  - host: api.hope.io
+    http:
+      paths:
+      - path: /auth
+        pathType: Prefix
+        backend:
+          service:
+            name: auth-service
+            port:
+              number: 8080
+      - path: /match
+        pathType: Prefix
+        backend:
+          service:
+            name: match-service
+            port:
+              number: 8080
+      - path: /leaderboard
+        pathType: Prefix
+        backend:
+          service:
+            name: leaderboard-service
+            port:
+              number: 8080
+  - host: game.hope.io
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: game-service
+            port:
+              number: 8082

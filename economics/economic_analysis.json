@@ -1,0 +1,118 @@
+{
+  "summary": {
+    "total_revenue_30d": 1700.2880000000168,
+    "avg_dau": 7900.133333333333,
+    "projected_annual_revenue": 1666904.249457986
+  },
+  "optimal_pricing": {
+    "100": {
+      "current_price": 0.99,
+      "optimal_price": 0.85,
+      "expected_quantity": 1245,
+      "expected_revenue": 1065.29
+    },
+    "550": {
+      "current_price": 4.99,
+      "optimal_price": 0.84,
+      "expected_quantity": 14521,
+      "expected_revenue": 12174.19
+    },
+    "1200": {
+      "current_price": 9.99,
+      "optimal_price": 0.83,
+      "expected_quantity": 41703,
+      "expected_revenue": 34643.46
+    },
+    "2500": {
+      "current_price": 19.99,
+      "optimal_price": 0.82,
+      "expected_quantity": 119587,
+      "expected_revenue": 98486.15
+    },
+    "6500": {
+      "current_price": 49.99,
+      "optimal_price": 0.81,
+      "expected_quantity": 481083,
+      "expected_revenue": 391702.76
+    },
+    "14000": {
+      "current_price": 99.99,
+      "optimal_price": 0.81,
+      "expected_quantity": 1379929,
+      "expected_revenue": 1113206.06
+    }
+  },
+  "ad_optimization": {
+    "optimal_ads_per_session": 7.8,
+    "retention_rate": 0.541,
+    "revenue_per_session": 0.0091,
+    "ltv": 0.15
+  },
+  "market_analysis": {
+    "price_percentiles": {
+      "p25": 4.99,
+      "p50": 14.99,
+      "p75": 47.49
+    },
+    "average_arpdau": 0.35,
+    "average_d7_retention": 0.257,
+    "recommended_pricing": {
+      "starter_pack": 4.99,
+      "value_pack": 13.49,
+      "premium_pack": 47.49,
+      "whale_pack": 99.99
+    }
+  },
+  "regional_pricing": {
+    "US": {
+      "local_price": 9.98,
+      "ppp_index": 1.0,
+      "discount_from_us": "0.0%"
+    },
+    "UK": {
+      "local_price": 9.48,
+      "ppp_index": 0.95,
+      "discount_from_us": "5.0%"
+    },
+    "Germany": {
+      "local_price": 8.98,
+      "ppp_index": 0.9,
+      "discount_from_us": "10.0%"
+    },
+    "Japan": {
+      "local_price": 8.49,
+      "ppp_index": 0.85,
+      "discount_from_us": "15.0%"
+    },
+    "South Korea": {
+      "local_price": 7.99,
+      "ppp_index": 0.8,
+      "discount_from_us": "20.0%"
+    },
+    "Brazil": {
+      "local_price": 3.99,
+      "ppp_index": 0.4,
+      "discount_from_us": "60.0%"
+    },
+    "India": {
+      "local_price": 2.49,
+      "ppp_index": 0.25,
+      "discount_from_us": "75.0%"
+    },
+    "Russia": {
+      "local_price": 3.49,
+      "ppp_index": 0.35,
+      "discount_from_us": "65.0%"
+    },
+    "Mexico": {
+      "local_price": 4.49,
+      "ppp_index": 0.45,
+      "discount_from_us": "55.0%"
+    },
+    "Indonesia": {
+      "local_price": 2.99,
+      "ppp_index": 0.3,
+      "discount_from_us": "70.0%"
+    }
+  }
+}

@@ -5,10 +5,12 @@ use std::sync::Arc;
 mod proof;
 mod storage;
 mod bridge;
+mod economy;
 
 use proof::{ProofGenerator, PuzzleProof, Move, MoveAction};
 use storage::{OfflineStorage, SyncManager};
 use bridge::LibertaliaBridge;
+use economy::{EconomyManager, Currency, SubscriptionManager};
 
 // Game configuration constants
 const GRID_SIZE: usize = 3;
@@ -76,6 +78,12 @@ struct PlayerCredits {
     pending_proofs: u32,
 }
 
+#[derive(Resource)]
+struct GameEconomy {
+    manager: Arc<EconomyManager>,
+    subscription_manager: Arc<SubscriptionManager>,
+}
+
 fn main() {
     // Initialize proof and storage systems
     let storage = Arc::new(OfflineStorage::new(None).expect("Failed to create storage"));
@@ -85,6 +93,10 @@ fn main() {
     let mut proof_generator = ProofGenerator::new();
     // In production, load or generate player keypair
     proof_generator.set_player_keypair([1u8; 32], [2u8; 32]);
+    
+    // Initialize economy systems
+    let economy_manager = Arc::new(EconomyManager::new());
+    let subscription_manager = Arc::new(SubscriptionManager::new());
     
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -117,6 +129,10 @@ fn main() {
             pollen: 0,
             nectar: 0,
             pending_proofs: 0,
+        })
+        .insert_resource(GameEconomy {
+            manager: economy_manager.clone(),
+            subscription_manager: subscription_manager.clone(),
         })
         .add_systems(Startup, (setup, setup_ui))
         .add_systems(
@@ -386,6 +402,7 @@ fn check_result(
     puzzle_start_time: Res<PuzzleStartTime>,
     mut move_history: ResMut<MoveHistory>,
     mut player_credits: ResMut<PlayerCredits>,
+    game_economy: Res<GameEconomy>,
 ) {
     // Check if patterns match (with early exit optimization)
     let mut matches = true;
@@ -444,6 +461,26 @@ fn check_result(
                     // Calculate expected credits
                     let credits = proof::calculate_credits(&proof);
                     eprintln!("Proof generated! Expected credits: {}", credits);
+                    
+                    // Process economy rewards through the economy manager
+                    let player_id = "player_main".to_string(); // In production, use actual player ID
+                    match game_economy.manager.process_puzzle_completion(
+                        player_id.clone(),
+                        difficulty,
+                        solve_time,
+                    ) {
+                        Ok(coins_earned) => {
+                            eprintln!("Earned {} coins!", coins_earned);
+                            // Check for suspicious activity
+                            let risk_score = game_economy.manager.get_player_risk_score(&player_id);
+                            if risk_score > 0.5 {
+                                eprintln!("Warning: High risk score detected: {}", risk_score);
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("Economy error: {}", e);
+                        }
+                    }
                 }
             }
             Err(e) => {

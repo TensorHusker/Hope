@@ -1,0 +1,374 @@
+@startuml Hope_Distributed_Architecture
+!theme aws-orange
+skinparam backgroundColor #FEFEFE
+skinparam component {
+    BackgroundColor #FFE4B5
+    BorderColor #FF8C00
+    ArrowColor #FF4500
+}
+
+title Hope Distributed Systems Architecture
+
+package "Client Layer" {
+    [Android App] as android
+    [iOS App] as ios
+    [Web Client] as web
+}
+
+package "Edge Layer" {
+    [CDN] as cdn
+    [Load Balancer] as lb
+    [API Gateway] as gateway
+}
+
+package "Application Layer" {
+    component "Auth Service" as auth {
+        [JWT Handler]
+        [OAuth Provider]
+        [Session Manager]
+    }
+    
+    component "Game Service" as game {
+        [Game Logic]
+        [State Machine]
+        [Event Processor]
+    }
+    
+    component "Match Service" as match {
+        [Matchmaking]
+        [Room Manager]
+        [P2P Coordinator]
+    }
+    
+    component "Leaderboard Service" as leader {
+        [Score Aggregator]
+        [Ranking Engine]
+        [Statistics]
+    }
+}
+
+package "Consensus Layer" {
+    component "PBFT Consensus" as consensus {
+        [Pre-Prepare]
+        [Prepare]
+        [Commit]
+        [View Change]
+    }
+    
+    component "CRDT Manager" as crdt {
+        [G-Counter]
+        [LWW-Set]
+        [OR-Set]
+    }
+    
+    [Vector Clock] as vclock
+}
+
+package "Network Layer" {
+    component "WebRTC" as webrtc {
+        [STUN/TURN]
+        [Data Channels]
+        [Signaling]
+    }
+    
+    component "gRPC" as grpc {
+        [Service Mesh]
+        [Circuit Breaker]
+        [Retry Logic]
+    }
+    
+    [Nearby API] as nearby
+}
+
+package "Data Layer" {
+    database "Redis Cluster" as redis {
+        [Session Store]
+        [Cache]
+        [Pub/Sub]
+    }
+    
+    queue "Kafka" as kafka {
+        [Event Stream]
+        [Message Queue]
+        [Log Aggregation]
+    }
+    
+    database "PostgreSQL" as postgres {
+        [Player Data]
+        [Game State]
+        [Analytics]
+    }
+}
+
+package "Infrastructure" {
+    [Kubernetes] as k8s
+    [Prometheus] as prom
+    [Grafana] as graf
+    [ELK Stack] as elk
+}
+
+' Client connections
+android --> gateway : HTTPS/WSS
+ios --> gateway : HTTPS/WSS
+web --> cdn : Static Assets
+web --> gateway : API Calls
+
+' Edge routing
+cdn --> lb
+gateway --> lb
+lb --> auth : Round Robin
+lb --> game : Least Connections
+lb --> match : Consistent Hash
+lb --> leader : Round Robin
+
+' Service interactions
+auth --> redis : Sessions
+game --> consensus : State Sync
+game --> kafka : Events
+match --> webrtc : P2P Setup
+match --> nearby : Local Discovery
+
+' Consensus operations
+consensus --> crdt : Conflict Resolution
+consensus --> vclock : Event Ordering
+crdt --> redis : State Persistence
+
+' Network layer
+webrtc ..> grpc : Fallback
+game --> grpc : Service Calls
+match --> grpc : Service Calls
+
+' Data flow
+game --> kafka : Publish Events
+leader --> kafka : Subscribe Events
+leader --> redis : Cache Results
+auth --> postgres : User Data
+game --> postgres : Persistence
+
+' Monitoring
+k8s --> prom : Metrics
+prom --> graf : Visualization
+kafka --> elk : Logs
+
+@enduml
+
+@startuml Hope_Consensus_Flow
+!theme aws-orange
+title Byzantine Fault Tolerant Consensus Flow
+
+participant "Client" as client
+participant "Primary\nNode" as primary
+participant "Backup\nNode 1" as backup1
+participant "Backup\nNode 2" as backup2
+participant "Backup\nNode 3" as backup3
+participant "Byzantine\nNode" as byzantine
+
+== Request Phase ==
+client -> primary : Request(operation)
+activate primary
+
+== Pre-Prepare Phase ==
+primary -> primary : Assign sequence number
+primary -> backup1 : PrePrepare(view, seq, digest)
+primary -> backup2 : PrePrepare(view, seq, digest)
+primary -> backup3 : PrePrepare(view, seq, digest)
+primary -> byzantine : PrePrepare(view, seq, digest)
+
+== Prepare Phase ==
+backup1 -> backup2 : Prepare(view, seq, digest)
+backup1 -> backup3 : Prepare(view, seq, digest)
+backup1 -> primary : Prepare(view, seq, digest)
+backup1 -> byzantine : Prepare(view, seq, digest)
+
+backup2 -> backup1 : Prepare(view, seq, digest)
+backup2 -> backup3 : Prepare(view, seq, digest)
+backup2 -> primary : Prepare(view, seq, digest)
+backup2 -> byzantine : Prepare(view, seq, digest)
+
+backup3 -> backup1 : Prepare(view, seq, digest)
+backup3 -> backup2 : Prepare(view, seq, digest)
+backup3 -> primary : Prepare(view, seq, digest)
+backup3 -> byzantine : Prepare(view, seq, digest)
+
+byzantine -> backup1 : Prepare(view, seq, wrong_digest)
+note right: Byzantine sends incorrect message
+
+== Commit Phase (2f+1 prepares received) ==
+backup1 -> backup2 : Commit(view, seq, digest)
+backup1 -> backup3 : Commit(view, seq, digest)
+backup1 -> primary : Commit(view, seq, digest)
+
+backup2 -> backup1 : Commit(view, seq, digest)
+backup2 -> backup3 : Commit(view, seq, digest)
+backup2 -> primary : Commit(view, seq, digest)
+
+backup3 -> backup1 : Commit(view, seq, digest)
+backup3 -> backup2 : Commit(view, seq, digest)
+backup3 -> primary : Commit(view, seq, digest)
+
+primary -> backup1 : Commit(view, seq, digest)
+primary -> backup2 : Commit(view, seq, digest)
+primary -> backup3 : Commit(view, seq, digest)
+
+== Execute Phase (2f+1 commits received) ==
+primary -> primary : Execute operation
+backup1 -> backup1 : Execute operation
+backup2 -> backup2 : Execute operation
+backup3 -> backup3 : Execute operation
+
+== Reply Phase ==
+primary -> client : Reply(result)
+backup1 -> client : Reply(result)
+backup2 -> client : Reply(result)
+backup3 -> client : Reply(result)
+deactivate primary
+
+note over client : Client accepts after f+1 matching replies
+
+@enduml
+
+@startuml Hope_P2P_Network
+!theme aws-orange
+title Peer-to-Peer Network Topology
+
+cloud "Internet" {
+    node "STUN Server\nstun.l.google.com" as stun
+    node "TURN Server\nturn.hope.io" as turn
+    node "Signaling Server\nsignal.hope.io" as signal
+}
+
+package "Region: US-East" {
+    node "Peer A" as peerA {
+        [WebRTC Engine]
+        [Data Channel]
+        [Game State]
+    }
+    
+    node "Peer B" as peerB {
+        [WebRTC Engine]
+        [Data Channel]
+        [Game State]
+    }
+}
+
+package "Region: EU-West" {
+    node "Peer C" as peerC {
+        [WebRTC Engine]
+        [Data Channel]
+        [Game State]
+    }
+    
+    node "Peer D" as peerD {
+        [WebRTC Engine]
+        [Data Channel]
+        [Game State]
+    }
+}
+
+package "NAT/Firewall" {
+    node "Peer E\n(Behind NAT)" as peerE {
+        [WebRTC Engine]
+        [Data Channel]
+        [Game State]
+    }
+}
+
+' Signaling connections
+peerA ..> signal : SDP Offer
+peerB ..> signal : SDP Answer
+peerC ..> signal : ICE Candidates
+peerD ..> signal : Room Join
+peerE ..> signal : NAT Traversal
+
+' STUN/TURN
+peerA --> stun : Binding Request
+peerE --> turn : Relay Request
+
+' P2P connections
+peerA <--> peerB : Direct P2P
+peerA <--> peerC : Direct P2P
+peerB <--> peerD : Direct P2P
+peerC <--> peerD : Direct P2P
+peerE <..> turn : Relayed
+turn <..> peerA : Relayed Connection
+
+note bottom of peerE : Uses TURN relay due to\nsymmetric NAT
+
+@enduml
+
+@startuml Hope_Microservices_Communication
+!theme aws-orange
+title Microservices Communication Pattern
+
+actor Player
+
+box "API Gateway" #LightBlue
+    participant "Kong/Nginx" as gateway
+end box
+
+box "Auth Service" #LightGreen
+    participant "Auth API" as auth
+    database "User DB" as userdb
+end box
+
+box "Game Service" #LightYellow
+    participant "Game API" as game
+    participant "State Manager" as state
+end box
+
+box "Match Service" #LightPink
+    participant "Match API" as match
+    participant "Room Manager" as room
+end box
+
+box "Message Bus" #LightGray
+    queue "Kafka" as kafka
+    database "Redis" as redis
+end box
+
+== Authentication Flow ==
+Player -> gateway : POST /auth/login
+gateway -> auth : Authenticate
+auth -> userdb : Verify credentials
+userdb --> auth : User data
+auth -> redis : Store session
+auth --> gateway : JWT token
+gateway --> Player : Token + Session
+
+== Game Session Creation ==
+Player -> gateway : POST /game/create\n[JWT]
+gateway -> gateway : Verify JWT
+gateway -> game : Create game
+game -> state : Initialize state
+game -> kafka : Publish GameCreated
+game -> redis : Cache game state
+game --> gateway : Game ID
+gateway --> Player : Game details
+
+== Matchmaking Flow ==
+Player -> gateway : POST /match/find
+gateway -> match : Find match
+match -> redis : Get active players
+match -> room : Create room
+room -> kafka : Publish RoomCreated
+
+kafka -> game : RoomCreated event
+game -> state : Prepare game state
+game -> redis : Update cache
+
+match --> gateway : Room details
+gateway --> Player : Match found
+
+== Real-time Updates ==
+loop Game Loop
+    Player -> gateway : WebSocket
+    gateway -> game : Player action
+    game -> state : Update state
+    game -> kafka : Publish StateUpdate
+    kafka -> match : StateUpdate
+    kafka -> redis : Update cache
+    game --> gateway : State delta
+    gateway --> Player : Update
+end
+
+@enduml
